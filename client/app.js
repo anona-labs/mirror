@@ -45,11 +45,26 @@ function renderUser(item, showRole) {
   return wrap;
 }
 
+function toolHint(input) {
+  if (!input || typeof input !== "object") return "";
+  const keys = ["file_path", "path", "command", "query", "url", "pattern", "description", "prompt", "skill"];
+  for (const k of keys) {
+    if (input[k]) {
+      let v = String(input[k]).split("\n")[0];
+      if (v.length > 72) v = v.slice(0, 72) + "…";
+      return v;
+    }
+  }
+  return "";
+}
+
 function renderToolUse(block) {
   const details = el("details", "tool");
   const summary = el("summary", "tool-summary");
+  const hint = toolHint(block.input);
   summary.innerHTML =
-    '<span class="tool-name">' + escapeText(block.name) + "</span>";
+    '<span class="tool-name">' + escapeText(block.name) + "</span>" +
+    (hint ? '<span class="tool-hint">' + escapeText(hint) + "</span>" : "");
   details.appendChild(summary);
 
   const body = el("div", "tool-body");
@@ -116,6 +131,13 @@ function render(data) {
       /* ignore highlight failures */
     }
   });
+  // Let wide tables scroll horizontally instead of crushing the layout.
+  conversation.querySelectorAll(".bubble table").forEach((table) => {
+    if (table.parentElement && table.parentElement.classList.contains("tablewrap")) return;
+    const wrap = el("div", "tablewrap");
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  });
 }
 
 async function load(force) {
@@ -127,6 +149,7 @@ async function load(force) {
     lastVersion = data.version;
     render(data);
     if (stick) window.scrollTo(0, document.body.scrollHeight);
+    updateToBottom();
     setStatus("live", "live");
   } catch (e) {
     setStatus("off", "disconnected");
@@ -155,6 +178,39 @@ function escapeText(text) {
   div.textContent = text == null ? "" : String(text);
   return div.innerHTML;
 }
+
+// ---------- theme toggle (persisted, dark default) ----------
+const SUN =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+
+const root = document.documentElement;
+const themeBtn = document.getElementById("theme-toggle");
+
+function paintThemeIcon() {
+  const isDark = root.getAttribute("data-theme") !== "light";
+  themeBtn.innerHTML = isDark ? SUN : MOON; // show what you switch TO
+}
+themeBtn.addEventListener("click", () => {
+  const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+  root.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem("mirror-theme", next);
+  } catch (e) {
+    /* storage may be blocked; theme still applies for this session */
+  }
+  paintThemeIcon();
+});
+paintThemeIcon();
+
+// ---------- jump to latest ----------
+const toBottom = document.getElementById("to-bottom");
+toBottom.addEventListener("click", () => window.scrollTo({ top: document.body.scrollHeight }));
+function updateToBottom() {
+  toBottom.hidden = nearBottom();
+}
+window.addEventListener("scroll", updateToBottom, { passive: true });
 
 load(true);
 connect();
