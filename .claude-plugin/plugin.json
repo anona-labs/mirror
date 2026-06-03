@@ -1,0 +1,37 @@
+{
+  "name": "mirror",
+  "displayName": "Mirror",
+  "version": "0.1.0",
+  "description": "A live, styled HTML mirror of your Claude Code conversation. Prints a localhost link; renders the transcript your session already writes. No API cost, localhost only.",
+  "author": {
+    "name": "Anoop Bhat"
+  },
+  "homepage": "https://github.com/anoopbhat44/mirror",
+  "repository": "https://github.com/anoopbhat44/mirror",
+  "license": "MIT",
+  "keywords": ["transcript", "viewer", "html", "live", "hooks"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/server/hook_session_start.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/server/hook_stop.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

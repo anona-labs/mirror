@@ -1,0 +1,11 @@
+{"type":"user","message":{"role":"user","content":"Look at this file please"},"uuid":"u1","timestamp":"2026-06-03T10:00:00Z"}
+{"type":"user","message":{"role":"user","content":"<command-name>/deploy</command-name>\n<command-args>prod</command-args>"},"uuid":"u2","timestamp":"2026-06-03T10:00:05Z"}
+{"type":"assistant","message":{"id":"msg_A","role":"assistant","content":[{"type":"thinking","thinking":"Let me think.","signature":"sig"}]},"uuid":"a1","timestamp":"2026-06-03T10:00:06Z"}
+{"type":"assistant","message":{"id":"msg_A","role":"assistant","content":[{"type":"text","text":"Hello **world**"},{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/x"}}]},"uuid":"a2","timestamp":"2026-06-03T10:00:07Z"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents here"}]},"uuid":"u3","timestamp":"2026-06-03T10:00:08Z"}
+{"type":"assistant","message":{"id":"msg_C","role":"assistant","content":[{"type":"thinking","thinking":"   ","signature":"sig2"}]},"uuid":"a3","timestamp":"2026-06-03T10:00:09Z"}
+{"type":"assistant","message":{"id":"msg_S","role":"assistant","content":[{"type":"text","text":"secret subagent text"}]},"isSidechain":true,"uuid":"a4","timestamp":"2026-06-03T10:00:10Z"}
+{"type":"user","message":{"role":"user","content":"meta noise"},"isMeta":true,"uuid":"u4","timestamp":"2026-06-03T10:00:11Z"}
+{"type":"attachment","attachment":{"type":"hook_success","content":"hook output noise"},"uuid":"x1"}
+{"type":"assistant","message":{"id":"msg_B", BROKEN JSON HERE
+{"type":"assistant","message":{"id":"msg_B","role":"assistant","content":[{"type":"text","text":"Done."}]},"uuid":"a5","timestamp":"2026-06-03T10:00:12Z"}
