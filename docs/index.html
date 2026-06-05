@@ -89,7 +89,34 @@
 
     footer { text-align: center; color: var(--faint); font-size: 14px; padding: 54px 24px; border-top: 1px solid var(--border-soft); }
     footer a { color: var(--muted); }
-    @media (max-width: 640px) { .feat { grid-template-columns: 1fr; } }
+    /* carousel */
+    .carousel { position: relative; margin-top: 30px; }
+    .track { display: flex; gap: 22px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: 4px; margin: -4px; scrollbar-width: none; outline: none; }
+    .track::-webkit-scrollbar { display: none; }
+    .track:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 16px; }
+    .slide { flex: 0 0 100%; scroll-snap-align: center; min-width: 0; margin: 0; }
+    .frame { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; background: var(--bg-2); box-shadow: 0 30px 80px -50px oklch(0.05 0.02 var(--hue)), 0 0 0 1px color-mix(in oklch, var(--accent) 7%, transparent); }
+    .frame .chrome { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border-soft); background: var(--bg); }
+    .frame .chrome i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); display: inline-block; }
+    .frame .chrome .addr { margin-left: 10px; font: 12px var(--mono); color: var(--faint); }
+    .shot { height: clamp(230px, 40vw, 430px); display: grid; place-items: center; background: var(--bg); }
+    .shot img { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+    .cap { margin: 16px 6px 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; max-width: 70ch; }
+    .cap b { color: var(--text); font-weight: 620; }
+    .cbtn { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border); background: color-mix(in oklch, var(--bg-2) 86%, transparent); backdrop-filter: blur(6px); color: var(--text); font-size: 22px; line-height: 1; cursor: pointer; display: grid; place-items: center; transition: transform 0.16s ease, border-color 0.16s ease; z-index: 2; }
+    .cbtn:hover { border-color: var(--faint); transform: translateY(-50%) scale(1.07); }
+    .cbtn.prev { left: 10px; } .cbtn.next { right: 10px; }
+    .dots { display: flex; justify-content: center; gap: 9px; margin-top: 20px; }
+    .dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: none; background: var(--border); cursor: pointer; transition: background 0.16s ease, width 0.16s ease; }
+    .dots button[aria-current="true"] { background: var(--accent); width: 22px; border-radius: 5px; }
+    /* prompt bar above each example */
+    .ask { display: flex; align-items: center; gap: 10px; background: oklch(0.13 0.012 var(--hue)); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 10px 9px 11px; margin-bottom: 14px; }
+    .ask-tag { flex: none; font: 600 9.5px var(--mono); letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent) 32%, transparent); border-radius: 5px; padding: 3px 7px; }
+    .ask-text { flex: 1; min-width: 0; font: 13px var(--mono); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ask .copy { flex: none; font: 11px var(--mono); color: var(--faint); background: var(--bg-2); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 9px; cursor: pointer; transition: color 0.15s ease; }
+    .ask .copy:hover { color: var(--text); }
+    @media (prefers-reduced-motion: reduce) { .track { scroll-behavior: auto; } }
+    @media (max-width: 640px) { .feat { grid-template-columns: 1fr; } .cbtn { display: none; } .ask-text { white-space: normal; } }
   </style>
 </head>
 <body>
@@ -164,11 +191,48 @@ claude</pre>
         <div class="card"><span class="ic">&#128172;</span><h3>Watch the live session</h3><p>The conversation you are in appears on the right and updates after every turn, keeping your scroll position. A green dot marks it live.</p></div>
         <div class="card"><span class="ic">&#128194;</span><h3>Switch between sessions</h3><p>The left sidebar lists every Claude Code session, grouped by project and sorted by recency. Click any one to read it.</p></div>
         <div class="card"><span class="ic">&#128269;</span><h3>Search across everything</h3><p>Type in the search box to find any message across all your sessions. Click a result to jump to it with the match highlighted.</p></div>
-        <div class="card"><span class="ic">&#127769;</span><h3>Make it yours</h3><p>Toggle dark and light with the button in the top bar. It remembers your choice.</p></div>
+        <div class="card"><span class="ic">&#127769;</span><h3>Make it yours</h3><p>From the top bar: toggle dark and light, turn diagrams on or off, hide thinking or tool calls, and copy a Resume command for any session. It remembers your choices. Run <code class="inline">/mirror</code> to reopen the link.</p></div>
       </div>
-      <div class="preview" style="margin-top:32px;">
-        <div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; search</span></div>
-        <img src="search.png" alt="Searching across all sessions in Mirror, with matches highlighted in the results.">
+    </section>
+
+    <section id="showcase">
+      <p class="eyebrow">Try these</p>
+      <h2>Get a feel for it in five minutes.</h2>
+      <p class="lead">Give Claude one of these prompts and see exactly what Mirror renders. Use the arrows, the dots, or swipe to move through the examples.</p>
+      <div class="carousel">
+        <div class="track" id="mtrack" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Examples">
+          <figure class="slide">
+            <div class="ask"><span class="ask-tag">Prompt</span><span class="ask-text">Draw a mermaid diagram of how a request flows through this app.</span><button class="copy" type="button" aria-label="Copy prompt">Copy</button></div>
+            <div class="frame"><div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; diagram</span></div><div class="shot"><img src="feat-mermaid.png" alt="A mermaid flowchart rendered from a fenced code block, with a Source toggle in the corner."></div></div>
+            <figcaption class="cap"><b>You get a real diagram.</b> Flip any one to its source, or toggle diagrams on and off from the top bar.</figcaption>
+          </figure>
+          <figure class="slide">
+            <div class="ask"><span class="ask-tag">Prompt</span><span class="ask-text">Read every file in src/ and tell me what each one does.</span><button class="copy" type="button" aria-label="Copy prompt">Copy</button></div>
+            <div class="frame"><div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; tools</span></div><div class="shot"><img src="feat-tools.png" alt="Four tool calls collapsed into one group with a count header and an expand-all control."></div></div>
+            <figcaption class="cap"><b>The tool calls collapse into one group</b> with a count and an expand-all control, so a busy turn stays readable.</figcaption>
+          </figure>
+          <figure class="slide">
+            <div class="ask"><span class="ask-tag">Prompt</span><span class="ask-text">What looks wrong in this screenshot?</span><button class="copy" type="button" aria-label="Copy prompt">Copy</button></div>
+            <div class="frame"><div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; images</span></div><div class="shot"><img src="feat-image.png" alt="A pasted dashboard image rendered inline beneath a user message."></div></div>
+            <figcaption class="cap"><b>Your image renders inline,</b> and so do screenshots your tools take, instead of a wall of base64.</figcaption>
+          </figure>
+          <figure class="slide">
+            <div class="ask"><span class="ask-tag">Prompt</span><span class="ask-text">Print package.json in full and explain each dependency.</span><button class="copy" type="button" aria-label="Copy prompt">Copy</button></div>
+            <div class="frame"><div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; output</span></div><div class="shot"><img src="feat-code.png" alt="A long YAML block folded behind a Show more control, with a Copy button."></div></div>
+            <figcaption class="cap"><b>Long output folds behind "Show more,"</b> and every code block gets a copy button on hover.</figcaption>
+          </figure>
+          <figure class="slide">
+            <div class="ask"><span class="ask-tag">In Mirror</span><span class="ask-text">Search: rollback</span></div>
+            <div class="frame"><div class="chrome"><i></i><i></i><i></i><span class="addr">localhost:7842 &middot; search</span></div><div class="shot"><img src="search.png" alt="Searching across all sessions in Mirror, with matches highlighted in the results."></div></div>
+            <figcaption class="cap"><b>Find anything across every session,</b> with matches highlighted and a click to jump straight to them.</figcaption>
+          </figure>
+        </div>
+        <button class="cbtn prev" id="mprev" type="button" aria-label="Previous example">&#8249;</button>
+        <button class="cbtn next" id="mnext" type="button" aria-label="Next example">&#8250;</button>
+        <div class="dots" id="mdots" role="tablist" aria-label="Choose example"></div>
+      </div>
+      <div class="callout" style="margin-top: 24px;">
+        <p>And from the top bar: toggle <b>Diagrams</b>, hide <b>thinking</b> or <b>tool calls</b> from the filter menu, copy a <b>Resume</b> command for any session, and run <code class="inline">/mirror</code> any time to reopen the link.</p>
       </div>
     </section>
 
@@ -181,6 +245,8 @@ claude</pre>
         <div class="card"><h3>Multi-session workspace</h3><p>Every session in one place, grouped by project, with live indicators and message counts.</p></div>
         <div class="card"><h3>Full-text search</h3><p>Fast search across your whole history, powered by SQLite under the hood. No setup.</p></div>
         <div class="card"><h3>Real rendering</h3><p>Markdown, highlighted code, tables, and collapsible tool calls and thinking. Wide content uses the space.</p></div>
+        <div class="card"><h3>Diagrams and images</h3><p>Mermaid blocks render as diagrams, with a per-diagram source toggle. Pasted images and screenshot tool results show inline.</p></div>
+        <div class="card"><h3>Built for long sessions</h3><p>Runs of tool calls collapse into a group, code blocks get a copy button, and long output folds behind "Show more".</p></div>
         <div class="card"><h3>Zero dependencies</h3><p>Pure Python standard library on the server. Nothing to install, nothing to build.</p></div>
       </div>
     </section>
@@ -210,5 +276,62 @@ claude</pre>
   <footer>
     Open source under the MIT license. &nbsp;<a href="https://github.com/anoopbhat44/mirror">github.com/anoopbhat44/mirror</a>
   </footer>
+
+  <script>
+    (function () {
+      var track = document.getElementById("mtrack");
+      if (!track) return;
+      var slides = Array.prototype.slice.call(track.children);
+      var dots = document.getElementById("mdots");
+      slides.forEach(function (s, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-label", "Example " + (i + 1));
+        if (i === 0) b.setAttribute("aria-current", "true");
+        b.addEventListener("click", function () { go(i); });
+        dots.appendChild(b);
+      });
+      function go(i) { slides[i].scrollIntoView({ block: "nearest", inline: "center" }); }
+      function nearest() {
+        var c = track.scrollLeft + track.clientWidth / 2, best = 0, bd = Infinity;
+        slides.forEach(function (s, i) {
+          var d = Math.abs(s.offsetLeft + s.clientWidth / 2 - c);
+          if (d < bd) { bd = d; best = i; }
+        });
+        return best;
+      }
+      function sync() {
+        var a = nearest();
+        Array.prototype.forEach.call(dots.children, function (d, i) {
+          if (i === a) d.setAttribute("aria-current", "true");
+          else d.removeAttribute("aria-current");
+        });
+      }
+      var t;
+      track.addEventListener("scroll", function () { clearTimeout(t); t = setTimeout(sync, 80); }, { passive: true });
+      document.getElementById("mprev").addEventListener("click", function () { go(Math.max(0, nearest() - 1)); });
+      document.getElementById("mnext").addEventListener("click", function () { go(Math.min(slides.length - 1, nearest() + 1)); });
+      track.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight") { e.preventDefault(); go(Math.min(slides.length - 1, nearest() + 1)); }
+        if (e.key === "ArrowLeft") { e.preventDefault(); go(Math.max(0, nearest() - 1)); }
+      });
+    })();
+
+    (function () {
+      document.querySelectorAll(".ask .copy").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var t = btn.parentElement.querySelector(".ask-text");
+          var s = t ? t.textContent : "";
+          try {
+            navigator.clipboard.writeText(s).then(function () {
+              btn.textContent = "Copied";
+              setTimeout(function () { btn.textContent = "Copy"; }, 1200);
+            }, function () {});
+          } catch (e) {}
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

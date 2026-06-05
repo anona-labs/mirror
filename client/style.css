@@ -211,8 +211,85 @@ details[open] > summary::before { transform: rotate(45deg); }
 .tool-hint { color: var(--faint); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .tool-body { padding: 2px 15px 13px; display: flex; flex-direction: column; gap: 11px; }
 .tool-label { font-size: 10px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
-.tool-body pre { margin: 0; max-height: 360px; }
+.tool-body pre { margin: 0; }
 .tool-result pre { border-color: color-mix(in oklch, var(--result) 32%, var(--code-border)); }
+
+/* ---------- tool-call groups ---------- */
+.tool-group { margin: 6px 0; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: color-mix(in oklch, var(--bg-raised) 45%, transparent); overflow: hidden; }
+.tool-group-head { display: flex; align-items: baseline; gap: 10px; padding: 8px 13px; border-bottom: 1px solid var(--border-soft); }
+.tg-count { flex: none; font: 600 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tool); }
+.tg-names { flex: 1; min-width: 0; font: 12px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-toggle { flex: none; font: 11px var(--mono); color: var(--muted); background: none; border: none; cursor: pointer; padding: 2px 3px; }
+.tg-toggle:hover { color: var(--text); }
+.tool-group-list { display: flex; flex-direction: column; }
+.tool-group-list details.tool { margin: 0; border: none; border-radius: 0; background: none; }
+.tool-group-list details.tool + details.tool { border-top: 1px solid var(--border-soft); }
+.tool-group-list details.tool[open] { background: var(--bg-raised); }
+
+/* ---------- images ---------- */
+.images { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0; }
+.msg.user .images { justify-content: flex-end; }
+.image-link { display: inline-flex; line-height: 0; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); overflow: hidden; }
+.msg-image { display: block; width: auto; height: auto; max-width: min(440px, 100%); max-height: 380px; object-fit: contain; }
+.image-omitted { font: 12px var(--mono); color: var(--faint); padding: 10px 13px; border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.tool-result .images { margin: 0; }
+.tool-result .msg-image { max-width: 100%; }
+
+/* ---------- code blocks: copy + show-more ---------- */
+.code-wrap { position: relative; }
+.code-wrap .copy-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  font: 11px var(--mono); color: var(--muted); cursor: pointer;
+  background: color-mix(in oklch, var(--code-bg) 85%, transparent);
+  border: 1px solid var(--code-border); border-radius: 6px; padding: 3px 9px;
+  opacity: 0; transition: opacity 0.15s ease, color 0.15s ease;
+}
+.code-wrap:hover .copy-btn, .code-wrap .copy-btn:focus-visible { opacity: 1; }
+.code-wrap .copy-btn:hover { color: var(--text); }
+.code-wrap.clamped pre { max-height: 420px; overflow: hidden; }
+.code-wrap.clamped::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 360px; height: 60px; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--code-bg));
+}
+.more-btn {
+  display: block; width: 100%; cursor: pointer; margin-top: -1px;
+  font: 10.5px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  background: color-mix(in oklch, var(--code-bg) 72%, transparent);
+  border: 1px solid var(--code-border); border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm); padding: 6px;
+}
+.more-btn:hover { color: var(--text); }
+
+/* ---------- mermaid diagrams ---------- */
+.mermaid-block { margin: 0.8em 0; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-raised); overflow: hidden; }
+.mermaid-bar { display: flex; justify-content: flex-end; padding: 6px 8px; border-bottom: 1px solid var(--border-soft); }
+.mermaid-tgl { font: 11px var(--mono); color: var(--muted); cursor: pointer; background: none; border: 1px solid var(--border-soft); border-radius: 6px; padding: 3px 9px; }
+.mermaid-tgl:hover { color: var(--text); border-color: var(--border); }
+.mermaid-diagram { padding: 16px; overflow-x: auto; text-align: center; }
+.mermaid-diagram svg { max-width: 100%; height: auto; }
+.mermaid-source { margin: 0; border: none; border-radius: 0; }
+.mermaid-error { font: 12px var(--mono); color: oklch(0.7 0.16 25); padding: 6px 2px; }
+
+.diagram-toggle.on { color: var(--tool); border-color: color-mix(in oklch, var(--tool) 40%, var(--border-soft)); }
+
+/* ---------- filters + resume ---------- */
+.resume-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 5px 11px 5px 9px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--bg-raised); color: var(--muted); font: 500 12.5px var(--sans); cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease; }
+.resume-btn:hover { color: var(--text); border-color: var(--border); }
+.resume-btn svg { width: 15px; height: 15px; }
+.resume-btn[hidden] { display: none; }
+
+.filter-wrap { position: relative; display: flex; flex: none; }
+.filter-toggle-on { color: var(--tool); }
+.filter-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; min-width: 170px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 11px; padding: 8px; box-shadow: 0 14px 34px -14px oklch(0.05 0.02 var(--hue) / 0.7); }
+.filter-menu[hidden] { display: none; }
+.filter-head { font: 600 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding: 4px 8px 6px; }
+.filter-row { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px; font-size: 13.5px; cursor: pointer; }
+.filter-row:hover { background: color-mix(in oklch, var(--panel) 55%, transparent); }
+.filter-row input { accent-color: var(--tool); width: 15px; height: 15px; cursor: pointer; }
+
+[data-hide-thinking="1"] details.thinking { display: none; }
+[data-hide-tools="1"] details.tool,
+[data-hide-tools="1"] .tool-group { display: none; }
 
 /* ---------- jump to latest ---------- */
 .to-bottom {

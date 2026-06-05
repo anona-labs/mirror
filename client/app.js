@@ -9,6 +9,13 @@ const currentTitleEl = document.getElementById("current-title");
 const statusText = document.getElementById("status-text");
 const dot = document.getElementById("dot");
 const themeBtn = document.getElementById("theme-toggle");
+const diagramBtn = document.getElementById("diagram-toggle");
+const filterBtn = document.getElementById("filter-toggle");
+const filterMenu = document.getElementById("filter-menu");
+const showThinking = document.getElementById("show-thinking");
+const showTools = document.getElementById("show-tools");
+const resumeBtn = document.getElementById("resume-btn");
+const resumeLabel = document.getElementById("resume-label");
 const toBottom = document.getElementById("to-bottom");
 const menuBtn = document.getElementById("menu");
 const sidebar = document.getElementById("sidebar");
@@ -24,6 +31,13 @@ let lastVersion = null;
 let pendingHighlight = null; // query to highlight after opening a search result
 let searchTimer = null;
 let searchMode = false;
+
+const CLAMP_PX = 420; // code/result blocks taller than this collapse behind "Show more"
+let diagramsOn = true; // global default: render mermaid blocks as diagrams
+try { diagramsOn = localStorage.getItem("mirror-diagrams") !== "0"; } catch (e) {}
+let mermaidLoaded = false;
+let mermaidLoading = null;
+let mermaidSeq = 0;
 
 // ---------- small helpers ----------
 function el(tag, className, html) {
@@ -67,6 +81,62 @@ themeBtn.addEventListener("click", () => {
   root.setAttribute("data-theme", next);
   try { localStorage.setItem("mirror-theme", next); } catch (e) {}
   paintThemeIcon();
+  refreshMermaidTheme();
+});
+
+// ---------- diagrams toggle ----------
+function paintDiagramBtn() {
+  diagramBtn.classList.toggle("on", diagramsOn);
+  diagramBtn.setAttribute("aria-pressed", String(diagramsOn));
+  diagramBtn.title = diagramsOn ? "Diagrams on (click for source)" : "Diagrams off (showing source)";
+}
+diagramBtn.addEventListener("click", () => {
+  diagramsOn = !diagramsOn;
+  try { localStorage.setItem("mirror-diagrams", diagramsOn ? "1" : "0"); } catch (e) {}
+  paintDiagramBtn();
+  conversation.querySelectorAll(".mermaid-block").forEach((c) => c.__mermaid && c.__mermaid.setGlobal(diagramsOn));
+});
+
+// ---------- filters (hide thinking / tool blocks) ----------
+function applyFilter(attr, key, hidden) {
+  if (hidden) root.setAttribute(attr, "1");
+  else root.removeAttribute(attr);
+  try { localStorage.setItem(key, hidden ? "1" : "0"); } catch (e) {}
+}
+function initFilters() {
+  showThinking.checked = root.getAttribute("data-hide-thinking") !== "1";
+  showTools.checked = root.getAttribute("data-hide-tools") !== "1";
+  showThinking.addEventListener("change", () =>
+    applyFilter("data-hide-thinking", "mirror-hide-thinking", !showThinking.checked));
+  showTools.addEventListener("change", () =>
+    applyFilter("data-hide-tools", "mirror-hide-tools", !showTools.checked));
+}
+function closeFilterMenu() {
+  filterMenu.hidden = true;
+  filterBtn.setAttribute("aria-expanded", "false");
+  filterBtn.classList.remove("filter-toggle-on");
+}
+filterBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = filterMenu.hidden;
+  filterMenu.hidden = !open;
+  filterBtn.setAttribute("aria-expanded", String(open));
+  filterBtn.classList.toggle("filter-toggle-on", open);
+});
+filterMenu.addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", () => { if (!filterMenu.hidden) closeFilterMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !filterMenu.hidden) closeFilterMenu(); });
+
+// ---------- resume (copy `claude --resume <id>`) ----------
+resumeBtn.addEventListener("click", () => {
+  if (!currentId) return;
+  const cmd = "claude --resume " + currentId;
+  try {
+    navigator.clipboard.writeText(cmd).then(() => {
+      resumeLabel.textContent = "Copied";
+      setTimeout(() => { resumeLabel.textContent = "Resume"; }, 1300);
+    }, () => {});
+  } catch (e) {}
 });
 async function applyConfigTheme() {
   let stored = null;
@@ -136,6 +206,7 @@ function updateCurrentTitle() {
   } else {
     currentTitleEl.textContent = "Mirror";
   }
+  resumeBtn.hidden = !currentId;
 }
 
 function selectSession(id) {
@@ -156,13 +227,42 @@ function highlightCurrentInList() {
 }
 
 // ---------- conversation (incremental render) ----------
+function imgSig(images) {
+  return (images || []).map((im) => im.data ? im.data.length : (im.url || "o")).join("|");
+}
 function itemSig(item) {
   if (item.role === "user") {
-    return item.kind === "command" ? "c:" + item.command : "u:" + (item.text || "").length + ":" + (item.text || "").slice(0, 24);
+    if (item.kind === "command") return "c:" + item.command;
+    return "u:" + (item.text || "").length + ":" + (item.text || "").slice(0, 24) + ":i" + imgSig(item.images);
   }
   return "a:" + (item.blocks || []).map((b) =>
-    b.type[0] + (b.text ? b.text.length : "") + (b.result ? "r" + b.result.length : "")
+    b.type[0] + (b.text ? b.text.length : "") + (b.result ? "r" + b.result.length : "") +
+    (b.result_images ? "ri" + imgSig(b.result_images) : "")
   ).join(",");
+}
+
+function imgSrc(img) {
+  if (img.url) return img.url;
+  if (img.data) return "data:" + (img.media_type || "image/png") + ";base64," + img.data;
+  return null;
+}
+function renderImages(images) {
+  const wrap = el("div", "images");
+  (images || []).forEach((img) => {
+    if (img.omitted) {
+      wrap.appendChild(el("div", "image-omitted", "image omitted (" + (img.approx_kb || "?") + " KB)"));
+      return;
+    }
+    const src = imgSrc(img);
+    if (!src) return;
+    const a = el("a", "image-link");
+    a.href = src; a.target = "_blank"; a.rel = "noopener";
+    const im = document.createElement("img");
+    im.className = "msg-image"; im.loading = "lazy"; im.src = src; im.alt = "image";
+    a.appendChild(im);
+    wrap.appendChild(a);
+  });
+  return wrap;
 }
 
 function renderUserNode(item, showRole) {
@@ -171,7 +271,8 @@ function renderUserNode(item, showRole) {
     wrap.appendChild(el("div", "command-chip", "&#47;" + escapeText((item.command || "").replace(/^\//, ""))));
   } else {
     if (showRole) wrap.appendChild(el("div", "role", "You"));
-    wrap.appendChild(el("div", "bubble", md(item.text)));
+    if (item.text) wrap.appendChild(el("div", "bubble", md(item.text)));
+    if (item.images && item.images.length) wrap.appendChild(renderImages(item.images));
   }
   return wrap;
 }
@@ -203,22 +304,62 @@ function renderToolUse(block) {
     const rpre = el("pre"); const rcode = el("code"); rcode.textContent = block.result;
     rpre.appendChild(rcode); out.appendChild(rpre); body.appendChild(out);
   }
+  if (block.result_images && block.result_images.length) {
+    const out = el("div", "tool-result");
+    out.appendChild(el("div", "tool-label", "result image"));
+    out.appendChild(renderImages(block.result_images));
+    body.appendChild(out);
+  }
   details.appendChild(body);
   return details;
+}
+
+function renderToolGroup(run) {
+  const group = el("div", "tool-group");
+  const head = el("div", "tool-group-head");
+  const names = [];
+  run.forEach((b) => { if (!names.includes(b.name)) names.push(b.name); });
+  const label = names.slice(0, 4).join(", ") + (names.length > 4 ? "…" : "");
+  head.innerHTML = '<span class="tg-count">' + run.length + " tool calls</span>" +
+    '<span class="tg-names">' + escapeText(label) + "</span>";
+  const toggle = el("button", "tg-toggle", "expand all");
+  toggle.type = "button";
+  const list = el("div", "tool-group-list");
+  run.forEach((b) => list.appendChild(renderToolUse(b)));
+  toggle.addEventListener("click", () => {
+    const tools = list.querySelectorAll("details.tool");
+    const anyClosed = Array.from(tools).some((d) => !d.open);
+    tools.forEach((d) => { d.open = anyClosed; });
+    toggle.textContent = anyClosed ? "collapse all" : "expand all";
+  });
+  head.appendChild(toggle);
+  group.appendChild(head);
+  group.appendChild(list);
+  return group;
 }
 
 function renderAssistantNode(item, showRole) {
   const wrap = el("article", "msg assistant" + (showRole ? "" : " cont"));
   if (showRole) wrap.appendChild(el("div", "role", "Claude"));
-  (item.blocks || []).forEach((block) => {
-    if (block.type === "text") wrap.appendChild(el("div", "bubble", md(block.text)));
+  const blocks = item.blocks || [];
+  let i = 0;
+  while (i < blocks.length) {
+    const block = blocks[i];
+    if (block.type === "text") { wrap.appendChild(el("div", "bubble", md(block.text))); i++; }
     else if (block.type === "thinking") {
       const d = el("details", "thinking");
       d.appendChild(el("summary", "thinking-summary", "thinking"));
       d.appendChild(el("div", "thinking-body", md(block.text)));
       wrap.appendChild(d);
-    } else if (block.type === "tool_use") wrap.appendChild(renderToolUse(block));
-  });
+      i++;
+    } else if (block.type === "tool_use") {
+      let j = i;
+      while (j < blocks.length && blocks[j].type === "tool_use") j++;
+      const run = blocks.slice(i, j);
+      wrap.appendChild(run.length >= 2 ? renderToolGroup(run) : renderToolUse(run[0]));
+      i = j;
+    } else { i++; }
+  }
   return wrap;
 }
 
@@ -226,8 +367,119 @@ function renderNode(item, showRole) {
   return item.role === "user" ? renderUserNode(item, showRole) : renderAssistantNode(item, showRole);
 }
 
+// ---------- mermaid (lazy) ----------
+function mermaidTheme() {
+  return root.getAttribute("data-theme") === "light" ? "neutral" : "dark";
+}
+function ensureMermaid() {
+  if (mermaidLoaded) return Promise.resolve(window.mermaid);
+  if (mermaidLoading) return mermaidLoading;
+  mermaidLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "/vendor/mermaid.min.js";
+    s.onload = () => {
+      try { window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: mermaidTheme() }); }
+      catch (e) {}
+      mermaidLoaded = true;
+      resolve(window.mermaid);
+    };
+    s.onerror = () => { mermaidLoading = null; reject(new Error("could not load mermaid")); };
+    document.head.appendChild(s);
+  });
+  return mermaidLoading;
+}
+function refreshMermaidTheme() {
+  if (!mermaidLoaded) return;
+  try { window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: mermaidTheme() }); }
+  catch (e) {}
+  conversation.querySelectorAll(".mermaid-block").forEach((c) => c.__mermaid && c.__mermaid.rerender());
+}
+function renderMermaidBlock(codeEl) {
+  const pre = codeEl.closest("pre");
+  if (!pre) return;
+  const source = codeEl.textContent;
+  const container = el("div", "mermaid-block");
+  const bar = el("div", "mermaid-bar");
+  const tgl = el("button", "mermaid-tgl"); tgl.type = "button";
+  const diagramHost = el("div", "mermaid-diagram");
+  const sourceHost = el("pre", "mermaid-source");
+  const sc = el("code"); sc.textContent = source; sourceHost.appendChild(sc);
+  bar.appendChild(tgl);
+  container.appendChild(bar);
+  container.appendChild(diagramHost);
+  container.appendChild(sourceHost);
+  pre.replaceWith(container);
+
+  let mode = diagramsOn ? "diagram" : "source";
+  let drawn = false;
+  function draw() {
+    drawn = true;
+    ensureMermaid()
+      .then((m) => m.render("mmd-" + (++mermaidSeq), source))
+      .then(({ svg }) => { diagramHost.innerHTML = svg; })
+      .catch((err) => {
+        drawn = false;
+        diagramHost.innerHTML = "";
+        diagramHost.appendChild(el("div", "mermaid-error", escapeText("diagram error: " + (err && err.message || err))));
+      });
+  }
+  function apply() {
+    if (mode === "diagram") {
+      sourceHost.hidden = true; diagramHost.hidden = false;
+      tgl.textContent = "</> Source";
+      if (!drawn) draw();
+    } else {
+      diagramHost.hidden = true; sourceHost.hidden = false;
+      tgl.textContent = "▢ Diagram";
+    }
+  }
+  tgl.addEventListener("click", () => { mode = mode === "diagram" ? "source" : "diagram"; apply(); });
+  container.__mermaid = {
+    setGlobal(on) { mode = on ? "diagram" : "source"; apply(); },
+    rerender() { if (mode === "diagram") { drawn = false; draw(); } },
+  };
+  apply();
+}
+
+// ---------- code blocks: copy + show-more ----------
+function decoratePre(pre) {
+  if (pre.parentElement && pre.parentElement.classList.contains("code-wrap")) return;
+  const wrap = el("div", "code-wrap");
+  pre.parentNode.insertBefore(wrap, pre);
+  wrap.appendChild(pre);
+  const code = pre.querySelector("code");
+  const copy = el("button", "copy-btn", "Copy"); copy.type = "button";
+  copy.addEventListener("click", () => {
+    const text = code ? code.textContent : pre.textContent;
+    try {
+      navigator.clipboard.writeText(text).then(
+        () => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1200); },
+        () => {}
+      );
+    } catch (e) {}
+  });
+  wrap.appendChild(copy);
+  if (pre.scrollHeight > CLAMP_PX) {
+    wrap.classList.add("clamped");
+    const more = el("button", "more-btn", "Show more"); more.type = "button";
+    more.addEventListener("click", () => {
+      const clamped = wrap.classList.toggle("clamped");
+      more.textContent = clamped ? "Show more" : "Show less";
+    });
+    wrap.appendChild(more);
+  }
+}
+
 function enhance(node) {
-  node.querySelectorAll("pre code").forEach((c) => { try { hljs.highlightElement(c); } catch (e) {} });
+  node.querySelectorAll("code.language-mermaid").forEach(renderMermaidBlock);
+  node.querySelectorAll("pre code").forEach((c) => {
+    if (c.closest(".mermaid-block")) return;
+    try { hljs.highlightElement(c); } catch (e) {}
+  });
+  node.querySelectorAll("pre").forEach((pre) => {
+    if (pre.closest(".mermaid-block")) return;
+    decoratePre(pre);
+  });
   node.querySelectorAll(".bubble table").forEach((t) => {
     if (t.parentElement && t.parentElement.classList.contains("tablewrap")) return;
     const w = el("div", "tablewrap"); t.parentNode.insertBefore(w, t); w.appendChild(t);
@@ -387,6 +639,8 @@ function connect() {
 // ---------- boot ----------
 (async function init() {
   paintThemeIcon();
+  paintDiagramBtn();
+  initFilters();
   await applyConfigTheme();
   await loadSessions();
   await loadConversation(true);

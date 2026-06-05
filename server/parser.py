@@ -14,6 +14,12 @@ import json
 # small even when a tool dumps a huge result. Full fidelity is a non-goal for v1.
 MAX_BLOCK_CHARS = 10000
 
+# Inline image limits. Base64 image data is shipped inside the conversation JSON,
+# so cap each image (oversized ones become a placeholder, never truncated base64,
+# which would corrupt the image) and cap how many we attach per message.
+MAX_IMAGE_CHARS = 2000000
+MAX_IMAGES = 12
+
 
 def _truncate(text):
     if text is None:
@@ -61,6 +67,44 @@ def _result_to_text(content):
                 parts.append("[tool: %s]" % sub["tool_name"])
         return "\n".join(parts)
     return ""
+
+
+def _image_from_block(block):
+    """Normalize an ``image`` content block to a small render-ready dict.
+
+    base64 images are returned as ``{media_type, data}``; oversized ones become a
+    ``{media_type, omitted, approx_kb}`` placeholder so we never ship a giant or
+    truncated payload. URL-sourced images are returned as ``{url}``.
+    """
+    src = block.get("source")
+    if not isinstance(src, dict):
+        return None
+    stype = src.get("type")
+    if stype == "base64":
+        data = src.get("data") or ""
+        media = src.get("media_type") or "image/png"
+        if len(data) > MAX_IMAGE_CHARS:
+            return {"media_type": media, "omitted": True,
+                    "approx_kb": len(data) * 3 // 4 // 1024}
+        return {"media_type": media, "data": data}
+    if stype == "url" and src.get("url"):
+        return {"url": src["url"]}
+    return None
+
+
+def _result_images(content):
+    """Pull image blocks out of a tool_result ``content`` list (e.g. screenshots)."""
+    if not isinstance(content, list):
+        return []
+    images = []
+    for sub in content:
+        if isinstance(sub, dict) and sub.get("type") == "image":
+            img = _image_from_block(sub)
+            if img:
+                images.append(img)
+                if len(images) >= MAX_IMAGES:
+                    break
+    return images
 
 
 def _command_name(text):
@@ -164,16 +208,37 @@ def parse_transcript(source):
                     {"role": "user", "kind": "text", "text": _truncate(content)}
                 )
         elif isinstance(content, list):
-            # Resolve tool_result blocks onto their originating tool_use.
+            # A user list can be tool_result feedback (folded onto the matching
+            # tool_use) and/or a real multimodal message (text + pasted images).
+            text_parts = []
+            images = []
             for block in content:
                 if not isinstance(block, dict):
                     continue
-                if block.get("type") == "tool_result":
+                btype = block.get("type")
+                if btype == "tool_result":
                     tid = block.get("tool_use_id")
-                    text = _truncate(_result_to_text(block.get("content")))
                     tb = tool_uses_by_id.get(tid)
                     if tb is not None:
-                        tb["result"] = text
+                        tb["result"] = _truncate(_result_to_text(block.get("content")))
+                        result_images = _result_images(block.get("content"))
+                        if result_images:
+                            tb["result_images"] = result_images
+                elif btype == "text":
+                    text = block.get("text", "")
+                    if text and text.strip():
+                        text_parts.append(text)
+                elif btype == "image":
+                    if len(images) < MAX_IMAGES:
+                        img = _image_from_block(block)
+                        if img:
+                            images.append(img)
+            if text_parts or images:
+                item = {"role": "user", "kind": "text",
+                        "text": _truncate("\n".join(text_parts))}
+                if images:
+                    item["images"] = images
+                items.append(item)
 
     flush()
     return {"items": items}

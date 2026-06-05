@@ -49,6 +49,7 @@ ALLOWED_STATIC = {
     "/style.css": "style.css",
     "/vendor/marked.min.js": "vendor/marked.min.js",
     "/vendor/highlight.min.js": "vendor/highlight.min.js",
+    "/vendor/mermaid.min.js": "vendor/mermaid.min.js",
     "/vendor/highlight-github-dark.min.css": "vendor/highlight-github-dark.min.css",
 }
 

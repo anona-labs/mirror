@@ -12,6 +12,11 @@ clean, auto-updating document with a session switcher and full-text search.
   one marked. Click any session to read it.
 - **Search.** Full-text search across all your sessions (SQLite FTS5 under the hood,
   with a graceful fallback). Click a result to jump to the match.
+- **Readable tool-heavy turns.** Runs of tool calls collapse into a single group, code
+  blocks get a copy button, and long output folds behind "Show more". A filter menu hides
+  thinking or tool blocks, and a Resume button copies `claude --resume <id>` for any session.
+- **Diagrams and images.** Fenced `mermaid` blocks render as diagrams (toggle in the top
+  bar, or per block); pasted images and screenshot tool results show inline.
 - **Zero dependencies.** Pure Python 3 standard library on the server. No `pip`, no `npm`.
 
 ![Mirror](docs/screenshot.png)
@@ -54,6 +59,7 @@ After editing plugin files during development, run `/reload-plugins` inside Clau
 3. Open the link. The page renders the conversation and updates after every turn.
 4. Use the sidebar to switch between any of your sessions, and the search box to find
    anything across all of them.
+5. Run `/mirror` any time to reprint the link and open it in your browser.
 
 That is the whole thing. Nothing else to run.
 

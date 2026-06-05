@@ -103,5 +103,95 @@ class TestParseTranscript(unittest.TestCase):
         self.assertIn("truncated", text)
 
 
+class TestImages(unittest.TestCase):
+    def _line(self, obj):
+        import json
+        return json.dumps(obj)
+
+    def test_user_pasted_image_with_text(self):
+        line = self._line({
+            "type": "user",
+            "message": {"role": "user", "content": [
+                {"type": "text", "text": "look at this"},
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/png", "data": "aGVsbG8="}},
+            ]},
+        })
+        items = parse_transcript([line])["items"]
+        self.assertEqual(len(items), 1)
+        it = items[0]
+        self.assertEqual(it["role"], "user")
+        self.assertIn("look at this", it["text"])
+        self.assertEqual(len(it["images"]), 1)
+        self.assertEqual(it["images"][0]["media_type"], "image/png")
+        self.assertEqual(it["images"][0]["data"], "aGVsbG8=")
+
+    def test_user_image_only(self):
+        line = self._line({
+            "type": "user",
+            "message": {"role": "user", "content": [
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/jpeg", "data": "Zm9v"}},
+            ]},
+        })
+        items = parse_transcript([line])["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["images"][0]["media_type"], "image/jpeg")
+        self.assertEqual(items[0]["text"], "")
+
+    def test_tool_result_image_attached_to_tool_use(self):
+        a = self._line({
+            "type": "assistant",
+            "message": {"id": "m1", "role": "assistant", "content": [
+                {"type": "tool_use", "id": "t1", "name": "Screenshot", "input": {}},
+            ]},
+        })
+        u = self._line({
+            "type": "user",
+            "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": [
+                    {"type": "text", "text": "captured"},
+                    {"type": "image", "source": {
+                        "type": "base64", "media_type": "image/png", "data": "aGVsbG8="}},
+                ]},
+            ]},
+        })
+        items = parse_transcript([a, u])["items"]
+        self.assertEqual(len(items), 1)
+        block = items[0]["blocks"][0]
+        self.assertEqual(block["type"], "tool_use")
+        self.assertIn("captured", block["result"])
+        self.assertEqual(len(block["result_images"]), 1)
+        self.assertEqual(block["result_images"][0]["data"], "aGVsbG8=")
+
+    def test_oversized_image_becomes_placeholder(self):
+        big = "A" * 2_000_001
+        line = self._line({
+            "type": "user",
+            "message": {"role": "user", "content": [
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/png", "data": big}},
+            ]},
+        })
+        items = parse_transcript([line])["items"]
+        img = items[0]["images"][0]
+        self.assertTrue(img.get("omitted"))
+        self.assertNotIn("data", img)
+
+    def test_text_only_user_list_still_emits_item(self):
+        # A user message that arrives as a list with only text (no tool_result)
+        # must still produce a user item (previously dropped).
+        line = self._line({
+            "type": "user",
+            "message": {"role": "user", "content": [
+                {"type": "text", "text": "just text in a list"},
+            ]},
+        })
+        items = parse_transcript([line])["items"]
+        self.assertEqual(len(items), 1)
+        self.assertIn("just text in a list", items[0]["text"])
+        self.assertNotIn("images", items[0])
+
+
 if __name__ == "__main__":
     unittest.main()
