@@ -1,11 +1,16 @@
-# Pane - Roadmap
+# Mirror - Roadmap
 
-> Working title: **Pane** (a window pane for your AI conversations). Placeholder, rename later.
+Repo: https://github.com/anoopbhat44/mirror (public, MIT)
 
 A live, nicely-styled HTML mirror of your coding-agent session. You keep chatting in the
-terminal; Pane prints a link, and that link shows the conversation as an evolving, readable
+terminal; Mirror prints a link, and that link shows the conversation as an evolving, readable
 document instead of scrollback. No paid API calls. It renders the transcript your agent
-already writes, so it rides on your existing Claude Code / Codex subscription.
+already writes, so it rides on your existing Claude Code subscription. (Codex and other agents
+are a later adapter, see v2.)
+
+**Status (2026-06-05):** v1 is shipped and working in real sessions. The next phase (v2) turns
+the single-session viewer into a local workspace: multi-session, search, view-resume, and
+configurable behavior. Sequence and the SQLite decision are below.
 
 ---
 
@@ -13,7 +18,7 @@ already writes, so it rides on your existing Claude Code / Codex subscription.
 
 These constrain every version. When a feature violates one, it does not ship.
 
-1. **No paid API calls.** Pane never calls an LLM API itself. Rendering is local code over the
+1. **No paid API calls.** Mirror never calls an LLM API itself. Rendering is local code over the
    transcript the agent already produces. Any model output (e.g. structured artifacts) comes
    from the user's existing subscription session, never a separate billed key.
 2. **Local-first, privacy-first.** Transcripts contain secrets, file contents, and tool output.
@@ -29,6 +34,12 @@ These constrain every version. When a feature violates one, it does not ship.
 6. **Dumb server, smart client.** The server watches files and serves structured JSON plus a
    live-update stream. The browser client renders. This separation is what makes artifacts,
    sharing, and multi-tool support cheap to add later.
+7. **Transcripts are the source of truth.** Any database, cache, or index Mirror builds is
+   derived and rebuildable from the JSONL the agent writes. Delete it, re-ingest, lose nothing.
+   Never make Mirror's own store authoritative. (See the SQLite decision below.)
+8. **Incremental over rebuild.** As sessions get long, do not re-parse the whole transcript or
+   rebuild the whole DOM on every turn. Append new content; preserve what the user expanded and
+   where they scrolled.
 
 ---
 
@@ -61,44 +72,133 @@ agent session (Claude Code / Codex)
 
 ---
 
-## v1 - Local live view (free, open source)
+## v1 - Local live view (SHIPPED, free, open source)
 
 **Goal:** terminal stays exactly as it is, plus a localhost link that shows the conversation as a
-clean, live-updating document.
+clean, live-updating document. Done.
 
-**Features**
-- Claude Code plugin packaging (hooks + scripts), one-command install.
-- `SessionStart` hook starts the local server and prints the link.
-- `Stop` hook reports the transcript path; server watches it and pushes updates.
-- Transcript parser handling the core block types: user message, assistant text, tool call,
-  tool result, thinking, images.
-- Browser client: markdown rendering, syntax-highlighted code, collapsible tool calls and
-  thinking blocks, auto-scroll, dark/light theme.
-- Live reload via SSE (no flicker, scroll preserved). Falls back to meta-refresh if SSE fails.
-- Single active session.
+**What shipped**
+- Claude Code plugin (`.claude-plugin/plugin.json`) with inline `SessionStart` + `Stop` hooks.
+  SessionStart boots a server (reusing a running one) and prints the link via `systemMessage`.
+- Python standard-library server bound to `127.0.0.1`: `/api/conversation` (JSON), `/events`
+  (SSE live-reload), `/healthz`. No pip, no npm.
+- Transcript parser tuned to the real on-disk format: groups streamed assistant blocks by
+  `message.id`, folds `tool_result` onto the originating `tool_use`, skips sidechain/meta noise,
+  drops empty (redacted) thinking. Caps oversized blocks. Built test-first.
+- Client: marked + highlight.js (vendored, offline), collapsible thinking and tool calls,
+  dark-first theme with a persisted light toggle (no flash), 1080px column with prose capped at a
+  readable measure while code, tables, and ASCII diagrams break out full width, zebra +
+  horizontal-scroll tables, one-line tool hints, jump-to-latest, SSE live reload with scroll-stick.
+- 21 tests (parser TDD + server smoke). README, MIT license, landing page (`docs/`), this roadmap.
+- Verified: the real plugin smoke test passed (renders and updates turn by turn in a live
+  session); dark and light both confirmed in-browser.
 
-**Non-goals (explicitly out)**
-- No auth, no public URL, no accounts.
-- No structured artifacts beyond what the transcript already contains.
-- No multi-session switching (note as v1.x).
-- No persistence or export.
+**Known limitations carried into v2** (these become v2 work items)
+- Full re-render on every update. It collapses tool calls you had expanded and will not scale to
+  very long sessions. Needs incremental rendering (principle 8).
+- Single session only. No way to view or switch between other sessions.
+- No search. No config or slash commands. Images and non-text tool results are not rendered yet.
 
-**Edge cases to handle**
-- Port already in use: pick a stable free port and reuse it across restarts.
-- Large transcripts: lazy-render or cap rendered history, load older on scroll.
-- Server lifecycle: idempotent start, bound to localhost only, easy to kill.
-- Secrets in transcript: localhost-only is the v1 mitigation. Document it clearly.
-
-**Done when:** a new user installs the plugin, runs Claude Code as normal, sees a localhost link,
-opens it, and watches the conversation update each turn with no extra cost and no config.
+**Open verification debt:** confirm the inline-`plugin.json` hook form is honored across Claude
+Code versions; keep a `hooks/hooks.json` fallback ready if not.
 
 ---
 
-## v2 - Artifacts and sharing (commercial)
+## v2 - The local workspace (next, free, open source)
+
+**Goal:** make the free local tool one you live in. Refine the reading experience, view every
+session instead of only the active one, search across them, and give the plugin real options.
+Still localhost-only, still no API cost. This is the phase that makes Mirror indispensable before
+anything is ever charged for (v3).
+
+### a. Continuous UI refinement (ships in small increments, ongoing)
+- **Incremental rendering (priority).** Append new turns instead of rebuilding the whole DOM each
+  update. Preserve which tool calls and thinking blocks the user expanded and their scroll
+  position. This is a correctness fix (today an update collapses what you opened) and a scale fix
+  (long sessions). Pairs with incremental server ingest below.
+- **Tool-heavy density.** Group runs of consecutive tool calls, collapsed by default with a
+  one-line summary, expandable. Keep a turn that fires 20 tools readable.
+- **Render images.** User-pasted images and image tool results (screenshots), not just text.
+- **Long output.** Truncate huge tool results with show-more, copy buttons on code blocks,
+  anchored headings.
+- **Find and filter.** In-page find across all messages including collapsed ones; toggles to hide
+  thinking or tool calls; a density switch.
+- **Polish.** Accessibility (focus, ARIA, reduced motion), keyboard nav, a long-session
+  jump-to-turn / minimap. Optional local export of a session to PDF or Markdown.
+
+### b. Multiple Claude Code sessions
+- The one shared server tracks **every** session, not a single active pointer. Each session's
+  hooks register its transcript; the server also discovers past sessions by scanning
+  `~/.claude/projects`.
+- Endpoints: list sessions (project, recency, title, message count, live flag), fetch one by id,
+  per-session update notifications.
+- UI: a session switcher / sidebar grouped by project, sorted by recency, a live dot on the
+  active one. Click to read any session; the active session highlights.
+- This generalizes later: the same registry can index Codex / Cursor / Aider transcripts through
+  thin adapters, so Mirror becomes the one place to read any agent session (principle 5).
+
+### c. Search
+- **In-session find first** (client-side, instant).
+- **Cross-session search next** (the "did we solve this before" feature). This is what motivates
+  the SQLite / FTS5 decision in the next section.
+
+### d. Resume and view state
+- Remember the last session you were viewing, your scroll, and which disclosures were open
+  (browser `localStorage`, no server state).
+- Surface the `claude --resume <id>` command or a button per session so you can jump back into the
+  actual agent. Mirror shows it; Claude Code runs it.
+
+### e. Skill options (plugin config + commands)
+- A config file (`~/.mirror/config.*`): port, bind address, default theme, auto-open browser,
+  include or exclude thinking and tool output, redaction on/off, per-project enable/disable.
+- Slash commands shipped by the plugin: open the dashboard, list and switch sessions, show
+  status, stop the server, toggle what is mirrored.
+
+**Done when:** you can open Mirror, see all your sessions, switch between them, search across them,
+resume where you were reading, and configure behavior, all locally and free, and a long
+tool-heavy session stays fast and keeps your expanded sections open across updates.
+
+---
+
+## Data and persistence: do we need SQLite?
+
+A standalone decision because it was asked directly. Short answer: **yes, but only in v2, only for
+cross-session search and incremental ingest, behind a graceful fallback, and only ever as a
+derived index** (principle 7).
+
+**What does not need a database:**
+- *Session list* (which sessions exist, recency, project, title): a scan of `~/.claude/projects`
+  plus a small JSON registry of hook registrations.
+- *View resume* (current session, scroll, open disclosures): browser `localStorage`.
+- *Resuming the actual agent*: that is Claude Code's own `claude --resume <id>`. Mirror surfaces
+  the command and stores nothing.
+
+**Where SQLite earns its place** (and note `sqlite3` is in the Python standard library, so this
+does not break the zero-dependency principle):
+- *Cross-session full-text search at scale.* FTS5 gives fast search over thousands of messages.
+  This is the real trigger.
+- *Incremental ingest.* Track a byte offset per session and append only new lines into the index,
+  so big transcripts are not re-parsed on every update. This also retires the v1 full-reparse cost.
+
+**Rules if/when adopted:**
+- The DB is a **derived, rebuildable cache/index** over the JSONL, never authoritative. Delete it
+  and re-ingest at any time.
+- FTS5 is absent in some minimal SQLite builds. Detect at startup; fall back to an in-memory scan
+  so search degrades, not breaks.
+- Keep the schema tiny and regenerable: `sessions(id, path, project, mtime, byte_offset, title)`,
+  `messages(session_id, idx, role, text, ts)`, and an FTS5 virtual table over message text.
+
+**Decision:** introduce SQLite in v2 to power cross-session search and incremental ingest only.
+Do not use it for primary storage or anything the transcript already records.
+
+---
+
+## v3 - Artifacts and public sharing (commercial)
 
 **Goal:** richer output than raw chat, and the ability to share a conversation or artifact at a
-public link. This is the first version worth paying for. Open-core line: the local engine and the
-artifact renderer stay open source; hosted sharing is the paid service.
+public link. This is the first version worth paying for, and it builds on a workspace people
+already use daily (v2). Open-core line: the local engine and the artifact renderer stay open
+source; hosted sharing is the paid service.
 
 ### Structured artifacts
 - A documented block protocol the model emits inside its normal (subscription) output, for
@@ -106,7 +206,8 @@ artifact renderer stay open source; hosted sharing is the paid service.
 - A plugin skill / instructions teach the model the format. Still zero API spend; it uses the
   session you already pay for.
 - Practical artifact types people actually want: tables, charts (bar / line / pie), mermaid
-  diagrams, code diffs, callout cards, checklists, image galleries, math.
+  diagrams, code diffs, callout cards, checklists, image galleries, math. (Mermaid here also
+  satisfies any later "real diagram rendering" ask beyond v2's ASCII-in-code-blocks.)
 - **Sandboxing:** once the page can render model-generated HTML/JS, isolate it. Start with an
   `iframe sandbox` (no same-origin, no top navigation). Only reach for a heavier sandbox
   (container / microVM such as smolvm) if you ever execute artifact code server-side. For
@@ -119,39 +220,16 @@ artifact renderer stay open source; hosted sharing is the paid service.
   public share is a reputational failure.
 - Two paths:
   - DIY: self-host plus a tunnel (`cloudflared` / `ngrok`) for users who want zero dependence.
-  - Hosted (the paid part): a relay that stores the snapshot and returns `share.pane.app/<id>`,
+  - Hosted (the paid part): a relay that stores the snapshot and returns `share.mirror.app/<id>`,
     with link expiry, password protection, and optional live-share (stream updates to viewers).
 
 **Monetization (open core)**
-- Free: local view (v1) plus a small number of public snapshots per month.
+- Free: the entire local workspace (v1 + v2) plus a small number of public snapshots per month.
 - Pro (monthly): unlimited shares, custom domain, password and expiry, premium themes and
   artifact types, live-share.
 
 **Done when:** a user can turn a session into a clean shareable page in one action, with secrets
 scrubbed, and pay for hosted sharing without ever touching an API key.
-
----
-
-## v3 - The workspace (vision, grounded)
-
-By now Pane is a universal, shareable viewer. v3 makes it a place you return to, not just a view
-of the current session. Build these in the order users ask for them, not all at once.
-
-- **Multi-session / project dashboard:** list all sessions, pin and organize, jump between them.
-- **Tool-agnostic adapters in earnest:** Codex, Cursor, Aider, Gemini CLI, generic JSONL. Pane
-  becomes the one viewer for any coding agent. This is the main differentiator if Anthropic ships
-  its own first-party viewer.
-- **Full-text search across history:** "did we solve this before?" across every past session.
-- **Export:** PDF, Markdown, gist, blog-ready writeup. Turn a good session into something you can
-  hand to a colleague.
-- **Annotations and comments:** viewers comment on a shared conversation. First real
-  collaboration surface, and the bridge to a team product.
-- **Live co-watch:** teammates watch an agent work in real time. Useful for pairing, demos,
-  teaching.
-
-**What to validate before building all of it:** do users want a library (return-to value), or
-just good one-off shares? Search and export are cheap to test demand for. Co-watch is expensive;
-gate it on real pull.
 
 ---
 
@@ -171,8 +249,12 @@ Still grounded in real demand, but bigger bets. Each needs validation, not faith
   is the strongest moat here. Also the hardest to do safely; it crosses from viewer to controller,
   so security and auth must be mature first.
 - **Knowledge base over your sessions:** ask questions across your whole agent history. Ties into
-  search and export. Only worth it once there is a real corpus to query.
-- **Integrations:** post a session summary to a GitHub PR, a Slack channel, or CI.
+  v2's cross-session search. Only worth it once there is a real corpus to query.
+- **Collaboration:** annotations and comments on a shared conversation, and live co-watch (a
+  teammate watches an agent work in real time, for pairing, demos, teaching). The bridge from a
+  personal tool to a team product. Co-watch is expensive; gate it on real pull.
+- **Integrations:** post a session summary or shareable writeup to a GitHub PR, a Slack channel,
+  or CI.
 
 ---
 
@@ -180,31 +262,40 @@ Still grounded in real demand, but bigger bets. Each needs validation, not faith
 
 - **Security and privacy:** localhost-only until explicit publish; redaction before any share;
   bind and auth correctly the moment anything leaves the machine.
-- **Performance:** large transcripts must not freeze the page. Lazy rendering, virtualization,
-  bounded history.
+- **Performance:** large transcripts must not freeze the page. Incremental rendering and ingest
+  (principle 8), bounded/virtualized history, parse-once caching.
 - **Cross-platform:** macOS and Linux from v1.
 - **Adapter resilience:** transcript formats and hook APIs will change. Keep the adapter layer
   thin and versioned so a format change does not break the core.
+- **Derived state only:** any index or cache (see the SQLite decision) is rebuildable from the
+  transcripts and safe to delete.
 
 ---
 
 ## Honest risks
 
-- **Anthropic ships a native web view.** They already have a web app. Differentiation must be
-  tool-agnostic support, sharing, artifacts, and team features, not "pretty viewer" alone.
+- **Anthropic ships a native web view.** They already have a web app. Differentiation must be the
+  multi-session workspace, cross-session search, tool-agnostic support, sharing, and team
+  features, not "pretty viewer" alone.
 - **Hook / transcript instability.** Mitigate with a thin, versioned adapter layer.
 - **Secret leakage in public shares.** The single most damaging failure mode. Redaction must be
-  proven before v2 charges anyone.
-- **Scope creep in v3 and v4.** The local viewer is the wedge. Do not let workspace and team
-  features delay a great, free, reliable v1.
+  proven before v3 charges anyone.
+- **Premature persistence / over-engineering.** The pull to add a database, accounts, or sync
+  before they are needed. Stay file-first; add SQLite only at the trigger defined above; keep it
+  derived. v2 should feel lighter than its feature list, not heavier.
+- **Scope creep in v3 and v4.** The free local workspace is the wedge. Do not let sharing,
+  artifacts, or team features starve the thing that earns daily use.
 
 ---
 
 ## Sequence summary
 
-| Version | Theme | Cost to user | Open / paid |
-|---|---|---|---|
-| v1 | Local live view | Free | Open source |
-| v2 | Artifacts + public sharing | Free local, paid hosting | Open core |
-| v3 | Workspace, search, multi-tool, export | Free + paid tiers | Open core |
-| v4 | Team, analytics, interactive control | Paid (enterprise) | Open core + hosted |
+| Version | Theme | Status | Cost to user | Open / paid |
+|---|---|---|---|---|
+| v1 | Local live view | Shipped | Free | Open source |
+| v2 | Local workspace: UI refinement, multi-session, search, resume, skill options | Next | Free | Open source |
+| v3 | Artifacts + public sharing | Planned | Free local, paid hosting | Open core |
+| v4 | Team, analytics, collaboration, interactive control | Vision | Paid (enterprise) | Open core + hosted |
+
+SQLite enters in v2 as a derived search/index cache only (see the persistence decision). It is
+not a new dependency (`sqlite3` is stdlib) and never holds anything the transcripts do not.
