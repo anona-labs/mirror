@@ -90,6 +90,11 @@ class TestServer(unittest.TestCase):
         self.assertEqual(len(data["items"]), 4)
         self.assertNotEqual(data["version"], "none")
 
+    def test_static_mermaid_served(self):
+        status, body = self._get("/vendor/mermaid.min.js")
+        self.assertEqual(status, 200)
+        self.assertIn(b"mermaid", body[:200] + body[-200:])
+
     def test_unknown_path_404(self):
         status, _ = self._get("/secret")
         self.assertEqual(status, 404)

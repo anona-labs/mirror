@@ -9,9 +9,10 @@ already writes, so it rides on your existing Claude Code subscription. (Codex an
 are a later adapter, see v2.)
 
 **Status (2026-06-05):** v1 is shipped. v2 (the local workspace: multi-session, search,
-incremental rendering, config) is implemented and open as **PR #1**
-(https://github.com/anoopbhat44/mirror/pull/1, branch `v2-workspace`), pending review/merge.
-A few v2 polish items remain (listed in the v2 section). Sequence and the SQLite decision below.
+incremental rendering, config) is **merged to `main`** (PR #1). A second batch of v2 polish is
+implemented on branch `v2-polish` (**PR #2**): tool-call grouping, image rendering (pasted +
+screenshot tool results), copy-code and long-output show-more, mermaid diagram rendering with a
+UI toggle, and a `/mirror` slash command. Remaining v2 polish and the SQLite decision are below.
 
 ---
 
@@ -105,19 +106,22 @@ Code versions; keep a `hooks/hooks.json` fallback ready if not.
 
 ---
 
-## v2 - The local workspace (IN PR #1, free, open source)
+## v2 - The local workspace (MERGED + polish in PR #2, free, open source)
 
-**Status (2026-06-05): implemented in PR #1**, browser-verified against 79 real sessions,
-35 tests passing. Done in this PR: SQLite derived index (FTS5 + LIKE fallback, incremental
-ingest), endpoints `/api/sessions`, `/api/conversation?session=`, `/api/search`, `/api/config`;
-two-pane client with a session sidebar (grouped by project, live markers), cross-session search
-with highlighted snippets and jump-to-match, incremental append-only rendering (preserves
-expanded tools + scroll), `~/.mirror/config.json` (theme/port/auto_open), responsive mobile
-sidebar, beginner landing page (`docs/index.html`).
-**Remaining v2 polish (follow-up PRs):** tool-call grouping for tool-heavy turns; rendering
-images (pasted + screenshot tool results); long-output show-more + copy-code buttons;
-filters to hide thinking/tool blocks; `claude --resume` surfacing per session;
-optional PDF/Markdown export; a `/mirror` slash command; accessibility pass.
+**Status (2026-06-05): v2 merged to `main` (PR #1)**, browser-verified against 79 real sessions.
+Landed in PR #1: SQLite derived index (FTS5 + LIKE fallback, incremental ingest), endpoints
+`/api/sessions`, `/api/conversation?session=`, `/api/search`, `/api/config`; two-pane client with
+a session sidebar (grouped by project, live markers), cross-session search with highlighted
+snippets and jump-to-match, incremental append-only rendering (preserves expanded tools + scroll),
+`~/.mirror/config.json` (theme/port/auto_open), responsive mobile sidebar, beginner landing page.
+
+**Polish landed in PR #2 (branch `v2-polish`, 42 tests passing, browser-verified):** tool-call
+grouping for tool-heavy turns; image rendering (pasted user images + screenshot/tool-result
+images); copy-code buttons + long-output show-more; mermaid diagram rendering (vendored, offline,
+lazy-loaded) with a top-bar Diagrams toggle plus a per-block Source/Diagram switch; a `/mirror`
+slash command that prints and opens the live-view link.
+**Remaining v2 polish (future PRs):** filters to hide thinking/tool blocks; `claude --resume`
+surfacing per session; optional PDF/Markdown export; accessibility pass.
 
 **Goal:** make the free local tool one you live in. Refine the reading experience, view every
 session instead of only the active one, search across them, and give the plugin real options.
@@ -129,11 +133,12 @@ anything is ever charged for (v3).
   update. Preserve which tool calls and thinking blocks the user expanded and their scroll
   position. This is a correctness fix (today an update collapses what you opened) and a scale fix
   (long sessions). Pairs with incremental server ingest below.
-- **Tool-heavy density.** Group runs of consecutive tool calls, collapsed by default with a
-  one-line summary, expandable. Keep a turn that fires 20 tools readable.
-- **Render images.** User-pasted images and image tool results (screenshots), not just text.
-- **Long output.** Truncate huge tool results with show-more, copy buttons on code blocks,
-  anchored headings.
+- **Tool-heavy density.** (done, PR #2) Runs of 2+ consecutive tool calls group under a
+  "N tool calls" header with an expand/collapse-all control. Single calls render as before.
+- **Render images.** (done, PR #2) User-pasted images and screenshot/tool-result images render
+  inline; oversized images degrade to a placeholder rather than bloating the payload.
+- **Long output.** (done, PR #2) Tall code/result blocks clamp behind a "Show more" toggle; every
+  code block has a hover Copy button. Mermaid diagrams render (toggleable). Anchored headings TODO.
 - **Find and filter.** In-page find across all messages including collapsed ones; toggles to hide
   thinking or tool calls; a density switch.
 - **Polish.** Accessibility (focus, ARIA, reduced motion), keyboard nav, a long-session
@@ -164,8 +169,8 @@ anything is ever charged for (v3).
 ### e. Skill options (plugin config + commands)
 - A config file (`~/.mirror/config.*`): port, bind address, default theme, auto-open browser,
   include or exclude thinking and tool output, redaction on/off, per-project enable/disable.
-- Slash commands shipped by the plugin: open the dashboard, list and switch sessions, show
-  status, stop the server, toggle what is mirrored.
+- Slash commands shipped by the plugin: `/mirror` (done, PR #2) prints and opens the live-view
+  link. Future: list and switch sessions, show status, stop the server, toggle what is mirrored.
 
 **Done when:** you can open Mirror, see all your sessions, switch between them, search across them,
 resume where you were reading, and configure behavior, all locally and free, and a long
@@ -219,8 +224,9 @@ source; hosted sharing is the paid service.
 - A plugin skill / instructions teach the model the format. Still zero API spend; it uses the
   session you already pay for.
 - Practical artifact types people actually want: tables, charts (bar / line / pie), mermaid
-  diagrams, code diffs, callout cards, checklists, image galleries, math. (Mermaid here also
-  satisfies any later "real diagram rendering" ask beyond v2's ASCII-in-code-blocks.)
+  diagrams, code diffs, callout cards, checklists, image galleries, math. (Basic mermaid rendering
+  already shipped in v2 for fenced ```mermaid blocks; v3 extends it to model-emitted artifact
+  blocks with a documented protocol.)
 - **Sandboxing:** once the page can render model-generated HTML/JS, isolate it. Start with an
   `iframe sandbox` (no same-origin, no top navigation). Only reach for a heavier sandbox
   (container / microVM such as smolvm) if you ever execute artifact code server-side. For
@@ -306,7 +312,7 @@ Still grounded in real demand, but bigger bets. Each needs validation, not faith
 | Version | Theme | Status | Cost to user | Open / paid |
 |---|---|---|---|---|
 | v1 | Local live view | Shipped | Free | Open source |
-| v2 | Local workspace: multi-session, search, incremental render, config | In PR #1 | Free | Open source |
+| v2 | Local workspace: multi-session, search, incremental render, config | Merged (PR #1); polish in PR #2 | Free | Open source |
 | v3 | Artifacts + public sharing | Planned | Free local, paid hosting | Open core |
 | v4 | Team, analytics, collaboration, interactive control | Vision | Paid (enterprise) | Open core + hosted |
 
