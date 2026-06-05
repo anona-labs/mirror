@@ -8,9 +8,10 @@ document instead of scrollback. No paid API calls. It renders the transcript you
 already writes, so it rides on your existing Claude Code subscription. (Codex and other agents
 are a later adapter, see v2.)
 
-**Status (2026-06-05):** v1 is shipped and working in real sessions. The next phase (v2) turns
-the single-session viewer into a local workspace: multi-session, search, view-resume, and
-configurable behavior. Sequence and the SQLite decision are below.
+**Status (2026-06-05):** v1 is shipped. v2 (the local workspace: multi-session, search,
+incremental rendering, config) is implemented and open as **PR #1**
+(https://github.com/anoopbhat44/mirror/pull/1, branch `v2-workspace`), pending review/merge.
+A few v2 polish items remain (listed in the v2 section). Sequence and the SQLite decision below.
 
 ---
 
@@ -104,7 +105,19 @@ Code versions; keep a `hooks/hooks.json` fallback ready if not.
 
 ---
 
-## v2 - The local workspace (next, free, open source)
+## v2 - The local workspace (IN PR #1, free, open source)
+
+**Status (2026-06-05): implemented in PR #1**, browser-verified against 79 real sessions,
+35 tests passing. Done in this PR: SQLite derived index (FTS5 + LIKE fallback, incremental
+ingest), endpoints `/api/sessions`, `/api/conversation?session=`, `/api/search`, `/api/config`;
+two-pane client with a session sidebar (grouped by project, live markers), cross-session search
+with highlighted snippets and jump-to-match, incremental append-only rendering (preserves
+expanded tools + scroll), `~/.mirror/config.json` (theme/port/auto_open), responsive mobile
+sidebar, beginner landing page (`docs/index.html`).
+**Remaining v2 polish (follow-up PRs):** tool-call grouping for tool-heavy turns; rendering
+images (pasted + screenshot tool results); long-output show-more + copy-code buttons;
+filters to hide thinking/tool blocks; `claude --resume` surfacing per session;
+optional PDF/Markdown export; a `/mirror` slash command; accessibility pass.
 
 **Goal:** make the free local tool one you live in. Refine the reading experience, view every
 session instead of only the active one, search across them, and give the plugin real options.
@@ -293,7 +306,7 @@ Still grounded in real demand, but bigger bets. Each needs validation, not faith
 | Version | Theme | Status | Cost to user | Open / paid |
 |---|---|---|---|---|
 | v1 | Local live view | Shipped | Free | Open source |
-| v2 | Local workspace: UI refinement, multi-session, search, resume, skill options | Next | Free | Open source |
+| v2 | Local workspace: multi-session, search, incremental render, config | In PR #1 | Free | Open source |
 | v3 | Artifacts + public sharing | Planned | Free local, paid hosting | Open core |
 | v4 | Team, analytics, collaboration, interactive control | Vision | Paid (enterprise) | Open core + hosted |
 
