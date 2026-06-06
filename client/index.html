@@ -22,20 +22,22 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#conversation">Skip to conversation</a>
+  <div id="sr-status" class="sr-only" aria-live="polite"></div>
   <div class="app" id="app">
-    <aside class="sidebar" id="sidebar">
+    <aside class="sidebar" id="sidebar" aria-label="Sessions">
       <div class="side-head">
         <span class="logo">&#129694;</span>
         <span class="title">Mirror</span>
       </div>
       <div class="search">
-        <input id="search" type="search" placeholder="Search all sessions" autocomplete="off" spellcheck="false">
+        <input id="search" type="search" placeholder="Search all sessions" aria-label="Search all sessions" autocomplete="off" spellcheck="false">
         <label class="scope-row" id="scope-row" hidden>
           <input type="checkbox" id="scope-project">
           <span id="scope-label">This project only</span>
         </label>
       </div>
-      <div class="session-list" id="session-list"></div>
+      <div class="session-list" id="session-list" role="list" aria-label="Session list"></div>
       <div class="side-foot" id="side-foot"></div>
     </aside>
 
@@ -56,7 +58,7 @@
           <span>Export</span>
         </button>
         <div class="bar-right">
-          <span class="status" id="status"><span class="dot" id="dot"></span><span id="status-text">connecting</span></span>
+          <span class="status" id="status" role="status" aria-live="polite"><span class="dot" id="dot" aria-hidden="true"></span><span id="status-text">connecting</span></span>
           <div class="filter-wrap">
             <button id="filter-toggle" class="icon-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Filters" title="Filter what's shown">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="var(--bg-raised)"/><circle cx="15" cy="16" r="2.6" fill="var(--bg-raised)"/></svg>
@@ -85,13 +87,13 @@
         <button id="find-close" class="find-nav" type="button" aria-label="Close find" title="Close (Esc)">&#215;</button>
       </div>
 
-      <main id="conversation" class="conversation">
+      <main id="conversation" class="conversation" tabindex="-1" aria-label="Conversation">
         <div class="empty" id="empty">Waiting for the conversation&hellip;</div>
       </main>
 
-      <section id="stats-view" class="stats-view" hidden aria-label="Insights">
+      <section id="stats-view" class="stats-view" hidden role="dialog" aria-modal="true" aria-labelledby="stats-title">
         <div class="stats-head">
-          <span class="stats-title">Insights</span>
+          <span class="stats-title" id="stats-title">Insights</span>
           <button id="stats-close" class="find-nav" type="button" aria-label="Close insights" title="Close (Esc)">&#215;</button>
         </div>
         <div class="stats-inner" id="stats-inner"></div>
