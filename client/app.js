@@ -30,6 +30,7 @@ const statsBtn = document.getElementById("stats-btn");
 const statsView = document.getElementById("stats-view");
 const statsInner = document.getElementById("stats-inner");
 const statsClose = document.getElementById("stats-close");
+const srStatus = document.getElementById("sr-status");
 const toBottom = document.getElementById("to-bottom");
 const menuBtn = document.getElementById("menu");
 const sidebar = document.getElementById("sidebar");
@@ -86,6 +87,20 @@ function nearBottom() {
 }
 function isViewingActive() { return currentId === null || currentId === activeId; }
 
+// ---------- focus helpers (keyboard accessibility) ----------
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+function focusablesIn(container) {
+  return Array.from(container.querySelectorAll(FOCUSABLE)).filter((n) => n.offsetParent !== null);
+}
+function trapTab(container, e) {
+  if (e.key !== "Tab") return;
+  const items = focusablesIn(container);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
 // ---------- theme ----------
 const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
 const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
@@ -126,9 +141,11 @@ function initFilters() {
     applyFilter("data-hide-tools", "mirror-hide-tools", !showTools.checked));
 }
 function closeFilterMenu() {
+  const hadFocus = filterMenu.contains(document.activeElement);
   filterMenu.hidden = true;
   filterBtn.setAttribute("aria-expanded", "false");
   filterBtn.classList.remove("filter-toggle-on");
+  if (hadFocus) filterBtn.focus(); // return focus to the trigger
 }
 filterBtn.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -136,8 +153,10 @@ filterBtn.addEventListener("click", (e) => {
   filterMenu.hidden = !open;
   filterBtn.setAttribute("aria-expanded", String(open));
   filterBtn.classList.toggle("filter-toggle-on", open);
+  if (open) showThinking.focus(); // move focus into the menu
 });
 filterMenu.addEventListener("click", (e) => e.stopPropagation());
+filterMenu.addEventListener("keydown", (e) => trapTab(filterMenu, e));
 document.addEventListener("click", () => { if (!filterMenu.hidden) closeFilterMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !filterMenu.hidden) closeFilterMenu(); });
 
@@ -579,6 +598,7 @@ async function runSearch(q) {
   if (!q) {
     searchMode = false;
     renderSessionList(Object.values(sessionsById).sort((a, b) => b.mtime - a.mtime));
+    srStatus.textContent = "";
     return;
   }
   searchMode = true;
@@ -589,7 +609,11 @@ async function runSearch(q) {
   try {
     data = await (await fetch(url, { cache: "no-store" })).json();
   } catch (e) { return; }
-  renderSearchResults(data.results || [], q);
+  const results = data.results || [];
+  renderSearchResults(results, q);
+  srStatus.textContent = results.length
+    ? results.length + " result" + (results.length === 1 ? "" : "s") + " for " + q
+    : "No matches for " + q;
 }
 
 function renderSearchResults(results, q) {
@@ -749,9 +773,12 @@ function renderStats(data) {
   statsInner.appendChild(cs);
 }
 
+let lastFocusBeforeStats = null;
 async function openStats() {
+  lastFocusBeforeStats = document.activeElement;
   statsBtn.setAttribute("aria-pressed", "true");
   statsView.hidden = false;
+  statsClose.focus(); // move focus into the dialog immediately
   statsInner.innerHTML = "";
   statsInner.appendChild(el("div", "stats-loading", "Loading…"));
   let data;
@@ -767,9 +794,12 @@ async function openStats() {
 function closeStats() {
   statsView.hidden = true;
   statsBtn.setAttribute("aria-pressed", "false");
+  if (lastFocusBeforeStats && lastFocusBeforeStats.focus) lastFocusBeforeStats.focus();
+  lastFocusBeforeStats = null;
 }
 statsBtn.addEventListener("click", () => { if (statsView.hidden) openStats(); else closeStats(); });
 statsClose.addEventListener("click", closeStats);
+statsView.addEventListener("keydown", (e) => trapTab(statsView, e));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !statsView.hidden) { closeStats(); }
 });
@@ -920,7 +950,9 @@ function reapplyFind() {
   if (findHits.length) setFindCurrent(Math.min(Math.max(prev, 0), findHits.length - 1), false);
   else { findIdx = -1; updateFindCount(); }
 }
+let lastFocusBeforeFind = null;
 function openFind() {
+  if (findBar.hidden) lastFocusBeforeFind = document.activeElement;
   findBar.hidden = false;
   let sel = "";
   try { sel = String(window.getSelection()).trim(); } catch (e) {}
@@ -934,6 +966,8 @@ function closeFind() {
   clearFind();
   findQuery = "";
   findIdx = -1;
+  if (lastFocusBeforeFind && lastFocusBeforeFind.focus) lastFocusBeforeFind.focus();
+  lastFocusBeforeFind = null;
 }
 findInput.addEventListener("input", () => runFind(findInput.value));
 findInput.addEventListener("keydown", (e) => {
@@ -948,6 +982,19 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     openFind();
   }
+});
+
+// ---------- sidebar keyboard nav ----------
+// Arrow keys move focus between session (or search-result) rows; Tab still works.
+sessionListEl.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const items = Array.from(sessionListEl.querySelectorAll(".session, .result"));
+  if (!items.length) return;
+  e.preventDefault();
+  const cur = items.indexOf(document.activeElement);
+  const step = e.key === "ArrowDown" ? 1 : -1;
+  const next = cur === -1 ? items[0] : items[(cur + step + items.length) % items.length];
+  next.focus();
 });
 
 // ---------- sidebar (mobile) ----------
